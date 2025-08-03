@@ -1,0 +1,66 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+from Maze import Maze
+from Maze import plot_policy, plot_action_values, test_agent
+
+from tqdm import tqdm
+
+env = Maze()
+
+env.reset()
+frame = env.render(mode='rgb_array')
+plt.axis('off')
+plt.imshow(frame)
+#plt.show()
+
+action_values = np.full((5,5,4),-100)
+action_values[4,4,:] = 0 #The values of the goal are 0
+
+#plot_action_values(action_values)
+
+def target_policy(state):
+    av = action_values[state]
+    return np.random.choice(np.flatnonzero(av ==av.max()))
+
+def exploratory_policy(state, epsilon=0):
+    if np.random.random() < epsilon : #will pick a random action
+        return np.random.choice(4)
+    else: #will pick the action with the highest action value
+        av = action_values[state]
+        
+        return np.random.choice(np.flatnonzero(av==av.max()))
+    
+def off_policy_mc_control(action_values, 
+                          target_policy, 
+                          exploratory_policy, 
+                          episodes, 
+                          gamma = 0.99, 
+                          epsilon = 0.2):
+    csa = np.zeros((5,5,4))
+    for episode in tqdm(range(1, episodes + 1)):
+        G=0
+        W=1
+        state = env.reset()
+        done = False
+        transitions = []
+
+        while not done:
+            action = exploratory_policy(state, epsilon)
+            next_state, reward, done, _ = env.step(action)
+            transitions.append([state, action, reward])
+            state = next_state
+
+        for state_t, action_t, reward_t in reversed(transitions):
+            G = reward_t + gamma * G
+            csa[state_t][action_t] += W
+            qsa = action_values[state_t][action_t]
+            action_values[state_t][action_t] += (W / csa[state_t][action_t])*(G-qsa)
+            if action_t != target_policy(state_t):
+                break
+            W += W/(1-epsilon + epsilon/4)
+
+off_policy_mc_control(action_values, target_policy, exploratory_policy, episodes=1000, epsilon=0.3)
+plot_action_values(action_values)
+plot_policy(action_values, frame)
+test_agent(env, target_policy)
